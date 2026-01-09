@@ -13,11 +13,9 @@ const api = axios.create({
 });
 
 // Nominatim geocoding API (direct call - no auth needed)
+// Note: User-Agent cannot be set from browser JavaScript (security restriction)
 const nominatim = axios.create({
   baseURL: 'https://nominatim.openstreetmap.org',
-  headers: {
-    'User-Agent': 'SnowPrecipitationApp/1.0',
-  },
 });
 
 export async function searchPlaces(query: string): Promise<SearchResult[]> {

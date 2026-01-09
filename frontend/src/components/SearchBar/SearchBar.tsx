@@ -100,7 +100,7 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
       </div>
 
       {showDropdown && results.length > 0 && (
-        <div className="absolute z-50 w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="absolute z-[1000] w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden animate-fade-in">
           {results.map((result) => (
             <button
               key={result.place_id}
