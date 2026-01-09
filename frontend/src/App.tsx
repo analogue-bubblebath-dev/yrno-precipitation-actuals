@@ -5,10 +5,11 @@ import { SearchBar } from './components/SearchBar/SearchBar';
 import { DateRangePicker } from './components/DateRangePicker/DateRangePicker';
 import { TimeSeriesChart } from './components/Charts/TimeSeriesChart';
 import { HeatmapChart } from './components/Charts/HeatmapChart';
+import { ForecastGrid } from './components/Charts/ForecastGrid';
 import { useWeatherData } from './hooks/useWeatherData';
 import type { Coordinates, DateRange } from './types/weather';
 
-type ViewMode = 'timeseries' | 'heatmap';
+type ViewMode = 'timeseries' | 'heatmap' | 'grid';
 
 function App() {
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
@@ -146,6 +147,16 @@ function App() {
             </h2>
             <div className="flex gap-2">
               <button
+                onClick={() => setViewMode('grid')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/25'
+                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700'
+                }`}
+              >
+                Grid
+              </button>
+              <button
                 onClick={() => setViewMode('timeseries')}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   viewMode === 'timeseries'
@@ -153,7 +164,7 @@ function App() {
                     : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700'
                 }`}
               >
-                Time Series
+                Chart
               </button>
               <button
                 onClick={() => setViewMode('heatmap')}
@@ -179,11 +190,9 @@ function App() {
           {/* Charts */}
           {!loading && (
             <div className="animate-fade-in">
-              {viewMode === 'timeseries' ? (
-                <TimeSeriesChart data={data} />
-              ) : (
-                <HeatmapChart data={data} />
-              )}
+              {viewMode === 'grid' && <ForecastGrid data={data} />}
+              {viewMode === 'timeseries' && <TimeSeriesChart data={data} />}
+              {viewMode === 'heatmap' && <HeatmapChart data={data} />}
             </div>
           )}
         </div>
