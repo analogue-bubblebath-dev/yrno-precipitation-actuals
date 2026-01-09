@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, LayersControl } from 'react-leaflet';
 import L from 'leaflet';
 import type { Coordinates, WeatherStation } from '../../types/weather';
 import 'leaflet/dist/leaflet.css';
@@ -105,10 +105,21 @@ export function MapView({ selectedCoords, onLocationSelect, stations = [] }: Map
         className="h-full w-full"
         whenReady={() => setMapReady(true)}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer name="OpenStreetMap">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer checked name="OpenTopoMap">
+            <TileLayer
+              attribution='Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+              url="https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"
+              maxZoom={17}
+            />
+          </LayersControl.BaseLayer>
+        </LayersControl>
         
         {mapReady && (
           <>
