@@ -63,7 +63,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Left column: Map and location */}
           <div className="space-y-4">
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 relative z-20">
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 relative z-[1000]">
               <h2 className="text-lg font-semibold text-white mb-4">
                 Select Location
               </h2>
@@ -72,7 +72,7 @@ function App() {
               />
             </div>
             
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 h-[400px] relative z-10">
+            <div className="map-container bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 h-[400px]">
               <MapView
                 selectedCoords={selectedCoords}
                 onLocationSelect={(coords) => handleLocationSelect(coords)}
