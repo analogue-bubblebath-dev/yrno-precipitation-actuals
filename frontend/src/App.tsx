@@ -4,12 +4,11 @@ import { MapView } from './components/Map/MapView';
 import { SearchBar } from './components/SearchBar/SearchBar';
 import { DateRangePicker } from './components/DateRangePicker/DateRangePicker';
 import { TimeSeriesChart } from './components/Charts/TimeSeriesChart';
-import { HeatmapChart } from './components/Charts/HeatmapChart';
 import { ForecastGrid } from './components/Charts/ForecastGrid';
 import { useWeatherData } from './hooks/useWeatherData';
 import type { Coordinates, DateRange } from './types/weather';
 
-type ViewMode = 'timeseries' | 'heatmap' | 'grid';
+type ViewMode = 'timeseries' | 'grid';
 
 function App() {
   const [selectedCoords, setSelectedCoords] = useState<Coordinates | null>(null);
@@ -166,16 +165,6 @@ function App() {
               >
                 Chart
               </button>
-              <button
-                onClick={() => setViewMode('heatmap')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  viewMode === 'heatmap'
-                    ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/25'
-                    : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50 border border-slate-700'
-                }`}
-              >
-                Heatmap
-              </button>
             </div>
           </div>
 
@@ -192,7 +181,6 @@ function App() {
             <div className="animate-fade-in">
               {viewMode === 'grid' && <ForecastGrid data={data} />}
               {viewMode === 'timeseries' && <TimeSeriesChart data={data} />}
-              {viewMode === 'heatmap' && <HeatmapChart data={data} />}
             </div>
           )}
         </div>

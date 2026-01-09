@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { format, parseISO, startOfDay, isSameDay } from 'date-fns';
 import type { PrecipitationData } from '../../types/weather';
 
@@ -7,7 +8,7 @@ interface ForecastGridProps {
 
 interface PeriodData {
   precipitation: number;
-  snowDepth: number;
+  snowDepth: number | undefined; // undefined means no estimate available (for forecasts without baseline)
   temperature: number | null;
   minTemp: number | null;
   maxTemp: number | null;
@@ -61,7 +62,7 @@ function aggregateDataByDayAndPeriod(data: PrecipitationData[]): DayData[] {
     if (!dayData.periods[period]) {
       dayData.periods[period] = {
         precipitation: 0,
-        snowDepth: 0,
+        snowDepth: undefined as number | undefined, // Start as undefined, only set if we have data
         temperature: null,
         minTemp: null,
         maxTemp: null,
@@ -75,10 +76,14 @@ function aggregateDataByDayAndPeriod(data: PrecipitationData[]): DayData[] {
 
     const p = dayData.periods[period];
     p.precipitation += point.precipitation;
-    p.snowDepth = Math.max(p.snowDepth, point.snowDepth || 0);
+    // Use the last snow depth value in the period (snow depth is cumulative)
+    // Only update if we have a valid value (undefined means no estimate available)
+    if (point.snowDepth !== undefined && point.snowDepth !== null) {
+      p.snowDepth = point.snowDepth;
+    }
     
     // Track temperature (average), min, and max
-    if (point.temperature !== undefined) {
+    if (point.temperature !== undefined && point.temperature !== null) {
       if (p.temperature === null) {
         p.temperature = point.temperature;
         p.minTemp = point.temperature;
@@ -88,8 +93,6 @@ function aggregateDataByDayAndPeriod(data: PrecipitationData[]): DayData[] {
         p.minTemp = Math.min(p.minTemp!, point.temperature);
         p.maxTemp = Math.max(p.maxTemp!, point.temperature);
       }
-      // Calculate freezing level based on average temp
-      p.freezingLevel = calculateFreezingLevel(point.temperature);
     }
 
     // Track wind (use latest values)
@@ -102,6 +105,15 @@ function aggregateDataByDayAndPeriod(data: PrecipitationData[]): DayData[] {
 
     p.count += 1;
     p.isForecast = p.isForecast || point.isForcast;
+  });
+
+  // Final pass: recalculate freezing levels for all periods using final average temperatures
+  dayMap.forEach((day) => {
+    Object.values(day.periods).forEach((period) => {
+      if (period.temperature !== null && period.temperature !== undefined) {
+        period.freezingLevel = calculateFreezingLevel(period.temperature);
+      }
+    });
   });
 
   // Sort by date
@@ -128,71 +140,89 @@ function getSnowColor(cm: number): string {
   return 'bg-sky-300';
 }
 
-// Snow badge component - visual indicator like snow-forecast.com
-function SnowBadge({ cm }: { cm: number }) {
-  // Determine badge level and color
-  let level: number;
+// Snow badge component - shows actual snow depth with color coding
+function SnowBadge({ cm }: { cm: number | undefined }) {
+  // If no estimate available, show inactive badge
+  if (cm === undefined) {
+    return (
+      <div className="inline-flex items-center justify-center w-8 h-8 rounded-lg border-2 border-slate-600 bg-slate-800/30 text-slate-500 font-bold text-sm opacity-50">
+        —
+      </div>
+    );
+  }
+
+  // Determine badge color based on snow depth
+  // Show the actual rounded value, not arbitrary levels
+  const roundedValue = Math.round(cm);
   let bgColor: string;
   let textColor: string;
   let borderColor: string;
 
-  if (cm === 0) {
-    level = 0;
+  if (roundedValue === 0) {
     bgColor = 'bg-slate-600';
     textColor = 'text-slate-300';
     borderColor = 'border-slate-500';
-  } else if (cm < 3) {
-    level = Math.round(cm);
+  } else if (roundedValue < 5) {
     bgColor = 'bg-sky-800';
     textColor = 'text-sky-200';
     borderColor = 'border-sky-600';
-  } else if (cm < 8) {
-    level = 5;
+  } else if (roundedValue < 10) {
     bgColor = 'bg-sky-600';
     textColor = 'text-white';
     borderColor = 'border-sky-400';
-  } else if (cm < 15) {
-    level = 10;
+  } else if (roundedValue < 20) {
     bgColor = 'bg-cyan-500';
     textColor = 'text-white';
     borderColor = 'border-cyan-300';
-  } else if (cm < 25) {
-    level = 15;
+  } else if (roundedValue < 40) {
     bgColor = 'bg-cyan-400';
     textColor = 'text-cyan-900';
     borderColor = 'border-cyan-200';
-  } else if (cm < 40) {
-    level = 20;
+  } else if (roundedValue < 60) {
     bgColor = 'bg-teal-400';
     textColor = 'text-teal-900';
     borderColor = 'border-teal-200';
   } else {
-    level = Math.round(cm / 10) * 10;
     bgColor = 'bg-emerald-400';
     textColor = 'text-emerald-900';
     borderColor = 'border-emerald-200';
   }
 
+  // For values >= 100, show abbreviated (e.g., 120 -> "120")
+  // For smaller values, show full number
+  const displayValue = roundedValue >= 100 ? roundedValue : roundedValue;
+
   return (
     <div
       className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border-2 font-bold text-sm ${bgColor} ${textColor} ${borderColor} shadow-md`}
+      title={`Snow depth: ${roundedValue} cm`}
     >
-      {level}
+      {displayValue}
     </div>
   );
 }
 
-// Weather icon based on precipitation
-function WeatherIcon({ precip, snow }: { precip: number; snow: number }) {
-  if (snow > 5 || precip > 3) {
-    // Heavy snow
-    return <span className="text-lg">🌨️</span>;
-  } else if (snow > 0 || precip > 0.5) {
-    // Light snow
-    return <span className="text-lg">❄️</span>;
+// Weather icon based on precipitation amount (not snow depth)
+// This shows the current weather condition, not accumulated snow
+function WeatherIcon({ precip, temp }: { precip: number; temp: number | null }) {
+  // Determine if precipitation is likely snow (temp <= 2°C) or rain
+  const isSnowLikely = temp === null || temp <= 2;
+  
+  if (precip >= 5) {
+    // Heavy precipitation
+    return <span className="text-xl">{isSnowLikely ? '🌨️' : '🌧️'}</span>;
+  } else if (precip >= 2) {
+    // Moderate precipitation
+    return <span className="text-xl">{isSnowLikely ? '🌨️' : '🌧️'}</span>;
+  } else if (precip >= 0.5) {
+    // Light precipitation  
+    return <span className="text-xl">{isSnowLikely ? '❄️' : '🌦️'}</span>;
+  } else if (precip > 0) {
+    // Trace precipitation
+    return <span className="text-xl opacity-80">{isSnowLikely ? '🌥️' : '⛅'}</span>;
   } else {
-    // Clear/cloudy
-    return <span className="text-lg opacity-50">☁️</span>;
+    // No precipitation
+    return <span className="text-xl opacity-50">☀️</span>;
   }
 }
 
@@ -255,18 +285,23 @@ function getFreezingLevelColor(level: number | null): string {
 }
 
 export function ForecastGrid({ data }: ForecastGridProps) {
-  if (data.length === 0) {
+  // Memoize the aggregation to ensure it recalculates when data changes
+  const dayData = useMemo(() => {
+    if (data.length === 0) return [];
+    return aggregateDataByDayAndPeriod(data);
+  }, [data]);
+
+  const now = new Date();
+  const periodKeys = ['night-early', 'AM', 'PM', 'night-late'];
+  const periodLabels = ['night', 'AM', 'PM', 'night'];
+
+  if (data.length === 0 || dayData.length === 0) {
     return (
       <div className="h-80 flex items-center justify-center text-slate-400">
         No data available. Select a location and date range to view precipitation data.
       </div>
     );
   }
-
-  const dayData = aggregateDataByDayAndPeriod(data);
-  const now = new Date();
-  const periodKeys = ['night-early', 'AM', 'PM', 'night-late'];
-  const periodLabels = ['night', 'AM', 'PM', 'night'];
 
   return (
     <div className="overflow-x-auto">
@@ -290,7 +325,7 @@ export function ForecastGrid({ data }: ForecastGridProps) {
                 <div className="text-xs text-slate-400 uppercase">
                   {format(day.date, 'EEE')}
                 </div>
-                <div>{format(day.date, 'd')}</div>
+                <div>{format(day.date, 'MMM d')}</div>
               </th>
             ))}
           </tr>
@@ -322,13 +357,13 @@ export function ForecastGrid({ data }: ForecastGridProps) {
               periodKeys.map((period, idx) => {
                 const periodData = day.periods[period];
                 const precip = periodData?.precipitation || 0;
-                const snow = periodData?.snowDepth || 0;
+                const temp = periodData?.temperature ?? null;
                 return (
                   <td
                     key={`${day.date.toISOString()}-icon-${idx}`}
                     className="p-2 text-center border-b border-slate-800 border-l border-slate-800/50"
                   >
-                    <WeatherIcon precip={precip} snow={snow} />
+                    <WeatherIcon precip={precip} temp={temp} />
                   </td>
                 );
               })
@@ -347,7 +382,7 @@ export function ForecastGrid({ data }: ForecastGridProps) {
             {dayData.map((day) =>
               periodKeys.map((period, idx) => {
                 const periodData = day.periods[period];
-                const snow = periodData?.snowDepth || 0;
+                const snow = periodData?.snowDepth; // Can be undefined
                 return (
                   <td
                     key={`${day.date.toISOString()}-badge-${idx}`}
@@ -401,16 +436,17 @@ export function ForecastGrid({ data }: ForecastGridProps) {
             {dayData.map((day) =>
               periodKeys.map((period, idx) => {
                 const periodData = day.periods[period];
-                const snow = periodData?.snowDepth || 0;
+                const snow = periodData?.snowDepth; // Can be undefined
+                const hasData = snow !== undefined && snow !== null;
                 return (
                   <td
                     key={`${day.date.toISOString()}-snow-${idx}`}
-                    className={`p-2 text-center border-b border-slate-800 border-l border-slate-800/50 ${getSnowColor(
-                      snow
-                    )}`}
+                    className={`p-2 text-center border-b border-slate-800 border-l border-slate-800/50 ${
+                      hasData ? getSnowColor(snow) : 'bg-slate-800/30 opacity-50'
+                    }`}
                   >
                     <span className="font-mono text-white">
-                      {snow > 0 ? Math.round(snow) : '—'}
+                      {hasData && snow > 0 ? Math.round(snow) : '—'}
                     </span>
                   </td>
                 );

@@ -105,7 +105,7 @@ export async function getHistoricalData(
     params: {
       sources: stationId,
       referencetime,
-      elements: 'sum(precipitation_amount PT1H),surface_snow_thickness',
+      elements: 'sum(precipitation_amount PT1H),surface_snow_thickness,air_temperature',
     },
   });
   

@@ -29,11 +29,12 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
   const now = new Date();
 
   // Transform data for the chart
+  // Use null for undefined snow depth so the chart doesn't draw a line for missing data
   const chartData = data.map((d) => ({
     time: d.time,
     timestamp: new Date(d.time).getTime(),
     precipitation: d.precipitation,
-    snowDepth: d.snowDepth || 0,
+    snowDepth: d.snowDepth !== undefined && d.snowDepth !== null ? d.snowDepth : null,
     isForcast: d.isForcast,
   }));
 
@@ -74,12 +75,15 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
             <span className="ml-2 text-xs text-amber-400">(Forecast)</span>
           )}
         </p>
-        {payload.map((entry, index) => (
-          <p key={index} className="text-sm" style={{ color: entry.color }}>
-            {entry.name}: {entry.value.toFixed(1)}{' '}
-            {entry.dataKey === 'snowDepth' ? 'cm' : 'mm'}
-          </p>
-        ))}
+        {payload.map((entry, index) => {
+          if (entry.value === null || entry.value === undefined) return null;
+          return (
+            <p key={index} className="text-sm" style={{ color: entry.color }}>
+              {entry.name}: {entry.value.toFixed(1)}{' '}
+              {entry.dataKey === 'snowDepth' ? 'cm' : 'mm'}
+            </p>
+          );
+        })}
       </div>
     );
   };

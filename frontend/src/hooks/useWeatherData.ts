@@ -11,7 +11,7 @@ import {
   getForecast,
   getStationsInRegion,
 } from '../services/api';
-import { parseISO, isAfter, isBefore, addDays } from 'date-fns';
+import { parseISO, isAfter, isBefore, addDays, startOfDay, endOfDay } from 'date-fns';
 
 interface UseWeatherDataReturn {
   data: PrecipitationData[];
@@ -89,11 +89,23 @@ export function useWeatherData(): UseWeatherDataReturn {
                   const snow = obs.observations.find(
                     (o) => o.elementId === 'surface_snow_thickness'
                   );
+                  const temp = obs.observations.find(
+                    (o) => o.elementId === 'air_temperature'
+                  );
+                  const windSpeed = obs.observations.find(
+                    (o) => o.elementId === 'wind_speed'
+                  );
+                  const windDir = obs.observations.find(
+                    (o) => o.elementId === 'wind_from_direction'
+                  );
 
                   combinedData.push({
                     time: obs.referenceTime,
                     precipitation: precip?.value ?? 0,
                     snowDepth: snow?.value,
+                    temperature: temp?.value,
+                    windSpeed: windSpeed?.value,
+                    windDirection: windDir?.value,
                     isForcast: false,
                   });
                 }
@@ -122,11 +134,15 @@ export function useWeatherData(): UseWeatherDataReturn {
           const forecastResponse = await getForecast(coords);
 
           if (forecastResponse.properties?.timeseries) {
+            // Normalize date range boundaries to start/end of day for proper comparison
+            const rangeStart = startOfDay(dateRange.start);
+            const rangeEnd = endOfDay(dateRange.end);
+            
             for (const ts of forecastResponse.properties.timeseries) {
               const time = parseISO(ts.time);
               
-              // Only include if within our date range
-              if (isBefore(time, dateRange.start) || isAfter(time, dateRange.end)) {
+              // Only include if within our date range (inclusive of boundaries)
+              if (isBefore(time, rangeStart) || isAfter(time, rangeEnd)) {
                 continue;
               }
 
@@ -164,17 +180,51 @@ export function useWeatherData(): UseWeatherDataReturn {
         new Date(a.time).getTime() - new Date(b.time).getTime()
       );
 
-      // Calculate accumulated snow depth (simple accumulation model)
-      let accumulated = 0;
+      // Calculate accumulated snow depth
+      // For historical data: use observed values
+      // For forecast data: only estimate if we have a baseline from historical data
+      let accumulated: number | undefined = undefined;
+      
+      // Find the last historical snow depth to use as baseline for forecasts
+      // Process in chronological order to find the last observed value
       for (const point of combinedData) {
-        // Rough estimate: 1mm rain ≈ 1cm snow at cold temperatures
-        // This is a simplification - real snow ratio varies 5:1 to 20:1
-        if (point.snowDepth !== undefined) {
+        if (!point.isForcast && point.snowDepth !== undefined && point.snowDepth !== null) {
+          // Use observed snow depth from historical data
           accumulated = point.snowDepth;
-        } else {
-          // Assume cold enough for snow if precipitation exists
-          accumulated += point.precipitation;
-          point.snowDepth = accumulated;
+          point.snowDepth = accumulated; // Keep the observed value
+        } else if (point.isForcast) {
+          // For forecast data, only estimate if we have a baseline
+          if (accumulated === undefined) {
+            // No baseline available - leave forecast snow depth undefined (will show as "—")
+            point.snowDepth = undefined;
+            continue;
+          }
+          
+          // We have a baseline, estimate changes based on precipitation and temperature
+          // TypeScript: accumulated is guaranteed to be a number here
+          const currentSnow = accumulated;
+          const temp = point.temperature ?? 0;
+          
+          // Start from the accumulated value (carry forward existing snow)
+          let newAccumulated: number = currentSnow;
+          
+          // If temperature is cold enough for snow (≤ 2°C) and there's precipitation, add snow
+          if (temp <= 2 && point.precipitation > 0) {
+            // Snow ratio: 1mm precipitation ≈ 1cm snow depth at cold temps
+            // (This is simplified - real ratios vary 5:1 to 20:1 depending on conditions)
+            newAccumulated += point.precipitation;
+          }
+          
+          // Account for snow melt ONLY when temperature is above freezing
+          // Rough estimate: melt rate ~0.1cm per hour per degree above 0°C
+          if (temp > 0 && newAccumulated > 0) {
+            const meltRate = Math.min(newAccumulated, temp * 0.1); // Max 10% per hour per degree
+            newAccumulated = Math.max(0, newAccumulated - meltRate);
+          }
+          
+          // Update accumulated for next forecast point
+          accumulated = newAccumulated;
+          point.snowDepth = newAccumulated;
         }
       }
 
