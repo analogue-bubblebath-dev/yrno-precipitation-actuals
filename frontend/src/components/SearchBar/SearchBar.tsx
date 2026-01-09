@@ -69,7 +69,7 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
   }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full z-[1001]">
       <div className="relative">
         <input
           type="text"
