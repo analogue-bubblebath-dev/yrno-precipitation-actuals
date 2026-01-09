@@ -30,12 +30,6 @@ function App() {
     }
   }, []);
 
-  const handleFetchData = useCallback(() => {
-    if (selectedCoords) {
-      fetchData(selectedCoords, dateRange);
-    }
-  }, [selectedCoords, dateRange, fetchData]);
-
   // Auto-fetch when location or date range changes
   useEffect(() => {
     if (selectedCoords) {

@@ -12,7 +12,7 @@ export function SearchBar({ onLocationSelect }: SearchBarProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback(async (searchQuery: string) => {
     if (searchQuery.length < 3) {

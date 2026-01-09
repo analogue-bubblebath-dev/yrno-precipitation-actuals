@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { format, parseISO, isAfter } from 'date-fns';
+import { format } from 'date-fns';
 import type { PrecipitationData } from '../../types/weather';
 
 interface TimeSeriesChartProps {

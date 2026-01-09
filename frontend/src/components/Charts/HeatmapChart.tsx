@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { format, parseISO, getHours, getDay } from 'date-fns';
+import { parseISO, getHours, getDay } from 'date-fns';
 import type { PrecipitationData } from '../../types/weather';
 
 interface HeatmapChartProps {
