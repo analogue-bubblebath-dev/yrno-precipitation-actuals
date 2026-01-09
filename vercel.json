@@ -1,0 +1,16 @@
+{
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "npm install && cd frontend && npm install",
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@3"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/frost/stations", "destination": "/api/frost/stations" },
+    { "source": "/api/frost/observations", "destination": "/api/frost/observations" },
+    { "source": "/api/forecast", "destination": "/api/forecast" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
