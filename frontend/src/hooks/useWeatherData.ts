@@ -140,9 +140,16 @@ export function useWeatherData(): UseWeatherDataReturn {
                 ts.data.next_6_hours?.details?.precipitation_amount ??
                 0;
 
+              const temp = ts.data.instant?.details?.air_temperature;
+              const windSpeed = ts.data.instant?.details?.wind_speed;
+              const windDir = ts.data.instant?.details?.wind_from_direction;
+
               combinedData.push({
                 time: ts.time,
                 precipitation: precip,
+                temperature: temp,
+                windSpeed: windSpeed,
+                windDirection: windDir,
                 isForcast: true,
               });
             }

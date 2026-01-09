@@ -5,15 +5,23 @@ interface ForecastGridProps {
   data: PrecipitationData[];
 }
 
+interface PeriodData {
+  precipitation: number;
+  snowDepth: number;
+  temperature: number | null;
+  minTemp: number | null;
+  maxTemp: number | null;
+  windSpeed: number | null;
+  windDirection: number | null;
+  freezingLevel: number | null;
+  count: number;
+  isForecast: boolean;
+}
+
 interface DayData {
   date: Date;
   periods: {
-    [key: string]: {
-      precipitation: number;
-      snowDepth: number;
-      count: number;
-      isForecast: boolean;
-    };
+    [key: string]: PeriodData;
   };
 }
 
@@ -22,6 +30,15 @@ function getTimePeriod(hour: number): string {
   if (hour >= 6 && hour < 12) return 'AM';
   if (hour >= 12 && hour < 18) return 'PM';
   return 'night-late';
+}
+
+// Calculate freezing level based on temperature and standard lapse rate
+// Approximate: temperature drops ~6.5°C per 1000m
+function calculateFreezingLevel(tempAtLocation: number, locationAltitude: number = 0): number {
+  if (tempAtLocation <= 0) return 0; // Freezing at or below location
+  // Height above location where temp reaches 0°C
+  const heightAbove = (tempAtLocation / 6.5) * 1000;
+  return Math.round(locationAltitude + heightAbove);
 }
 
 function aggregateDataByDayAndPeriod(data: PrecipitationData[]): DayData[] {
@@ -45,18 +62,46 @@ function aggregateDataByDayAndPeriod(data: PrecipitationData[]): DayData[] {
       dayData.periods[period] = {
         precipitation: 0,
         snowDepth: 0,
+        temperature: null,
+        minTemp: null,
+        maxTemp: null,
+        windSpeed: null,
+        windDirection: null,
+        freezingLevel: null,
         count: 0,
         isForecast: point.isForcast,
       };
     }
 
-    dayData.periods[period].precipitation += point.precipitation;
-    dayData.periods[period].snowDepth = Math.max(
-      dayData.periods[period].snowDepth,
-      point.snowDepth || 0
-    );
-    dayData.periods[period].count += 1;
-    dayData.periods[period].isForecast = dayData.periods[period].isForecast || point.isForcast;
+    const p = dayData.periods[period];
+    p.precipitation += point.precipitation;
+    p.snowDepth = Math.max(p.snowDepth, point.snowDepth || 0);
+    
+    // Track temperature (average), min, and max
+    if (point.temperature !== undefined) {
+      if (p.temperature === null) {
+        p.temperature = point.temperature;
+        p.minTemp = point.temperature;
+        p.maxTemp = point.temperature;
+      } else {
+        p.temperature = (p.temperature * p.count + point.temperature) / (p.count + 1);
+        p.minTemp = Math.min(p.minTemp!, point.temperature);
+        p.maxTemp = Math.max(p.maxTemp!, point.temperature);
+      }
+      // Calculate freezing level based on average temp
+      p.freezingLevel = calculateFreezingLevel(point.temperature);
+    }
+
+    // Track wind (use latest values)
+    if (point.windSpeed !== undefined) {
+      p.windSpeed = point.windSpeed;
+    }
+    if (point.windDirection !== undefined) {
+      p.windDirection = point.windDirection;
+    }
+
+    p.count += 1;
+    p.isForecast = p.isForecast || point.isForcast;
   });
 
   // Sort by date
@@ -81,6 +126,132 @@ function getSnowColor(cm: number): string {
   if (cm < 20) return 'bg-sky-500/80';
   if (cm < 50) return 'bg-sky-400/90';
   return 'bg-sky-300';
+}
+
+// Snow badge component - visual indicator like snow-forecast.com
+function SnowBadge({ cm }: { cm: number }) {
+  // Determine badge level and color
+  let level: number;
+  let bgColor: string;
+  let textColor: string;
+  let borderColor: string;
+
+  if (cm === 0) {
+    level = 0;
+    bgColor = 'bg-slate-600';
+    textColor = 'text-slate-300';
+    borderColor = 'border-slate-500';
+  } else if (cm < 3) {
+    level = Math.round(cm);
+    bgColor = 'bg-sky-800';
+    textColor = 'text-sky-200';
+    borderColor = 'border-sky-600';
+  } else if (cm < 8) {
+    level = 5;
+    bgColor = 'bg-sky-600';
+    textColor = 'text-white';
+    borderColor = 'border-sky-400';
+  } else if (cm < 15) {
+    level = 10;
+    bgColor = 'bg-cyan-500';
+    textColor = 'text-white';
+    borderColor = 'border-cyan-300';
+  } else if (cm < 25) {
+    level = 15;
+    bgColor = 'bg-cyan-400';
+    textColor = 'text-cyan-900';
+    borderColor = 'border-cyan-200';
+  } else if (cm < 40) {
+    level = 20;
+    bgColor = 'bg-teal-400';
+    textColor = 'text-teal-900';
+    borderColor = 'border-teal-200';
+  } else {
+    level = Math.round(cm / 10) * 10;
+    bgColor = 'bg-emerald-400';
+    textColor = 'text-emerald-900';
+    borderColor = 'border-emerald-200';
+  }
+
+  return (
+    <div
+      className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border-2 font-bold text-sm ${bgColor} ${textColor} ${borderColor} shadow-md`}
+    >
+      {level}
+    </div>
+  );
+}
+
+// Weather icon based on precipitation
+function WeatherIcon({ precip, snow }: { precip: number; snow: number }) {
+  if (snow > 5 || precip > 3) {
+    // Heavy snow
+    return <span className="text-lg">🌨️</span>;
+  } else if (snow > 0 || precip > 0.5) {
+    // Light snow
+    return <span className="text-lg">❄️</span>;
+  } else {
+    // Clear/cloudy
+    return <span className="text-lg opacity-50">☁️</span>;
+  }
+}
+
+// Temperature color based on value
+function getTemperatureColor(temp: number | null): string {
+  if (temp === null) return 'bg-slate-700/50';
+  if (temp < -15) return 'bg-violet-900';
+  if (temp < -10) return 'bg-purple-800';
+  if (temp < -5) return 'bg-blue-800';
+  if (temp < 0) return 'bg-blue-600';
+  if (temp < 5) return 'bg-cyan-600';
+  if (temp < 10) return 'bg-teal-500';
+  if (temp < 15) return 'bg-green-500';
+  if (temp < 20) return 'bg-yellow-500';
+  if (temp < 25) return 'bg-orange-500';
+  return 'bg-red-500';
+}
+
+// Wind direction to compass direction
+function windDirectionToCompass(degrees: number): string {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(degrees / 45) % 8;
+  return directions[index];
+}
+
+// Wind arrow component
+function WindArrow({ direction, speed }: { direction: number | null; speed: number | null }) {
+  if (direction === null || speed === null) return <span className="text-slate-600">—</span>;
+  
+  const compass = windDirectionToCompass(direction);
+  // Color based on wind speed (m/s)
+  let color = 'text-green-400';
+  if (speed > 15) color = 'text-red-400';
+  else if (speed > 10) color = 'text-orange-400';
+  else if (speed > 5) color = 'text-yellow-400';
+  
+  return (
+    <div className={`flex flex-col items-center ${color}`}>
+      <span 
+        className="text-lg transform"
+        style={{ transform: `rotate(${direction + 180}deg)` }}
+      >
+        ↓
+      </span>
+      <span className="text-xs font-mono">{Math.round(speed)}</span>
+      <span className="text-xs opacity-70">{compass}</span>
+    </div>
+  );
+}
+
+// Freezing level color
+function getFreezingLevelColor(level: number | null): string {
+  if (level === null) return 'bg-slate-700/50';
+  if (level === 0) return 'bg-blue-900';
+  if (level < 500) return 'bg-blue-700';
+  if (level < 1000) return 'bg-cyan-700';
+  if (level < 1500) return 'bg-teal-600';
+  if (level < 2000) return 'bg-green-600';
+  return 'bg-green-500';
 }
 
 export function ForecastGrid({ data }: ForecastGridProps) {
@@ -142,6 +313,53 @@ export function ForecastGrid({ data }: ForecastGridProps) {
         </thead>
 
         <tbody>
+          {/* Weather icons row */}
+          <tr>
+            <td className="sticky left-0 bg-slate-900 z-10 p-2 text-slate-400 font-medium border-b border-slate-800">
+              <span className="text-xs">Weather</span>
+            </td>
+            {dayData.map((day) =>
+              periodKeys.map((period, idx) => {
+                const periodData = day.periods[period];
+                const precip = periodData?.precipitation || 0;
+                const snow = periodData?.snowDepth || 0;
+                return (
+                  <td
+                    key={`${day.date.toISOString()}-icon-${idx}`}
+                    className="p-2 text-center border-b border-slate-800 border-l border-slate-800/50"
+                  >
+                    <WeatherIcon precip={precip} snow={snow} />
+                  </td>
+                );
+              })
+            )}
+          </tr>
+
+          {/* Snow badges row */}
+          <tr className="bg-slate-800/30">
+            <td className="sticky left-0 bg-slate-900 z-10 p-2 text-slate-400 font-medium border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-cyan-300">❄️</span>
+                <span>Snow</span>
+              </div>
+              <div className="text-xs text-slate-500">cm badge</div>
+            </td>
+            {dayData.map((day) =>
+              periodKeys.map((period, idx) => {
+                const periodData = day.periods[period];
+                const snow = periodData?.snowDepth || 0;
+                return (
+                  <td
+                    key={`${day.date.toISOString()}-badge-${idx}`}
+                    className="p-2 text-center border-b border-slate-800 border-l border-slate-800/50"
+                  >
+                    <SnowBadge cm={snow} />
+                  </td>
+                );
+              })
+            )}
+          </tr>
+
           {/* Precipitation row */}
           <tr>
             <td className="sticky left-0 bg-slate-900 z-10 p-2 text-slate-400 font-medium border-b border-slate-800">
@@ -178,7 +396,7 @@ export function ForecastGrid({ data }: ForecastGridProps) {
                 <span className="text-cyan-300">❄️</span>
                 <span>Snow</span>
               </div>
-              <div className="text-xs text-slate-500">cm</div>
+              <div className="text-xs text-slate-500">cm depth</div>
             </td>
             {dayData.map((day) =>
               periodKeys.map((period, idx) => {
@@ -194,6 +412,94 @@ export function ForecastGrid({ data }: ForecastGridProps) {
                     <span className="font-mono text-white">
                       {snow > 0 ? Math.round(snow) : '—'}
                     </span>
+                  </td>
+                );
+              })
+            )}
+          </tr>
+
+          {/* Temperature row */}
+          <tr className="bg-slate-800/20">
+            <td className="sticky left-0 bg-slate-900 z-10 p-2 text-slate-400 font-medium border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-orange-400">🌡️</span>
+                <span>Temp</span>
+              </div>
+              <div className="text-xs text-slate-500">°C</div>
+            </td>
+            {dayData.map((day) =>
+              periodKeys.map((period, idx) => {
+                const periodData = day.periods[period];
+                const temp = periodData?.temperature;
+                return (
+                  <td
+                    key={`${day.date.toISOString()}-temp-${idx}`}
+                    className={`p-2 text-center border-b border-slate-800 border-l border-slate-800/50 ${getTemperatureColor(temp ?? null)}`}
+                  >
+                    <span className="font-mono text-white font-semibold">
+                      {temp !== null && temp !== undefined ? Math.round(temp) : '—'}
+                    </span>
+                    {periodData?.minTemp !== null && periodData?.maxTemp !== null && periodData?.minTemp !== periodData?.maxTemp && (
+                      <div className="text-xs text-slate-300 opacity-70">
+                        {Math.round(periodData.minTemp!)}–{Math.round(periodData.maxTemp!)}
+                      </div>
+                    )}
+                  </td>
+                );
+              })
+            )}
+          </tr>
+
+          {/* Freezing level row */}
+          <tr>
+            <td className="sticky left-0 bg-slate-900 z-10 p-2 text-slate-400 font-medium border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-blue-400">🧊</span>
+                <span>Freeze</span>
+              </div>
+              <div className="text-xs text-slate-500">m altitude</div>
+            </td>
+            {dayData.map((day) =>
+              periodKeys.map((period, idx) => {
+                const periodData = day.periods[period];
+                const freezeLevel = periodData?.freezingLevel;
+                return (
+                  <td
+                    key={`${day.date.toISOString()}-freeze-${idx}`}
+                    className={`p-2 text-center border-b border-slate-800 border-l border-slate-800/50 ${getFreezingLevelColor(freezeLevel ?? null)}`}
+                  >
+                    <span className="font-mono text-white">
+                      {freezeLevel !== null && freezeLevel !== undefined 
+                        ? (freezeLevel === 0 ? '0' : freezeLevel.toLocaleString()) 
+                        : '—'}
+                    </span>
+                  </td>
+                );
+              })
+            )}
+          </tr>
+
+          {/* Wind row */}
+          <tr className="bg-slate-800/20">
+            <td className="sticky left-0 bg-slate-900 z-10 p-2 text-slate-400 font-medium border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="text-teal-400">💨</span>
+                <span>Wind</span>
+              </div>
+              <div className="text-xs text-slate-500">m/s</div>
+            </td>
+            {dayData.map((day) =>
+              periodKeys.map((period, idx) => {
+                const periodData = day.periods[period];
+                return (
+                  <td
+                    key={`${day.date.toISOString()}-wind-${idx}`}
+                    className="p-2 text-center border-b border-slate-800 border-l border-slate-800/50"
+                  >
+                    <WindArrow 
+                      direction={periodData?.windDirection ?? null} 
+                      speed={periodData?.windSpeed ?? null} 
+                    />
                   </td>
                 );
               })
@@ -234,18 +540,81 @@ export function ForecastGrid({ data }: ForecastGridProps) {
       </table>
 
       {/* Legend */}
-      <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <span className="text-emerald-400">obs</span>
-          <span>= Observed data</span>
+      <div className="mt-6 p-4 bg-slate-800/30 rounded-lg space-y-4">
+        <h4 className="text-sm font-semibold text-slate-300">Legend</h4>
+        
+        {/* Snow badges */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+          <span className="font-medium text-slate-300 w-20">Snow:</span>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-6 rounded border-2 bg-slate-600 border-slate-500 flex items-center justify-center text-slate-300 font-bold text-xs">0</div>
+            <span>None</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-6 rounded border-2 bg-sky-600 border-sky-400 flex items-center justify-center text-white font-bold text-xs">5</div>
+            <span>Light</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-6 rounded border-2 bg-cyan-500 border-cyan-300 flex items-center justify-center text-white font-bold text-xs">10</div>
+            <span>Mod</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-6 rounded border-2 bg-teal-400 border-teal-200 flex items-center justify-center text-teal-900 font-bold text-xs">20</div>
+            <span>Heavy</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-amber-400">fcst</span>
-          <span>= Forecast data</span>
+
+        {/* Temperature scale */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+          <span className="font-medium text-slate-300 w-20">Temp:</span>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-4 rounded bg-violet-900"></div>
+            <span>&lt;-15</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-4 rounded bg-blue-600"></div>
+            <span>-5–0</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-4 rounded bg-cyan-600"></div>
+            <span>0–5</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-4 rounded bg-green-500"></div>
+            <span>10–15</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-6 h-4 rounded bg-orange-500"></div>
+            <span>20–25</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-cyan-500/80 rounded"></div>
-          <span>= Higher precipitation</span>
+
+        {/* Freezing level */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+          <span className="font-medium text-slate-300 w-20">Freeze lvl:</span>
+          <span>Altitude (meters) where temperature = 0°C</span>
+        </div>
+
+        {/* Wind */}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+          <span className="font-medium text-slate-300 w-20">Wind:</span>
+          <span className="text-green-400">●</span><span>&lt;5 m/s</span>
+          <span className="text-yellow-400">●</span><span>5–10 m/s</span>
+          <span className="text-orange-400">●</span><span>10–15 m/s</span>
+          <span className="text-red-400">●</span><span>&gt;15 m/s</span>
+          <span className="ml-2">Arrow shows wind direction</span>
+        </div>
+
+        {/* Data type */}
+        <div className="flex flex-wrap gap-4 text-xs text-slate-400">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 font-medium">obs</span>
+            <span>= Observed data</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 font-medium">fcst</span>
+            <span>= Forecast data</span>
+          </div>
         </div>
       </div>
     </div>

@@ -16,6 +16,9 @@ export interface PrecipitationData {
   time: string;
   precipitation: number; // mm
   snowDepth?: number; // cm
+  temperature?: number; // °C
+  windSpeed?: number; // m/s
+  windDirection?: number; // degrees
   isForcast: boolean;
 }
 
@@ -39,6 +42,10 @@ export interface LocationForecastTimeseries {
     instant: {
       details: {
         air_temperature?: number;
+        wind_speed?: number;
+        wind_from_direction?: number;
+        relative_humidity?: number;
+        air_pressure_at_sea_level?: number;
       };
     };
     next_1_hours?: {
