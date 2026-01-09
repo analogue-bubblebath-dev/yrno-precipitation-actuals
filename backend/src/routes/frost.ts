@@ -42,33 +42,15 @@ router.get('/stations', async (req: Request, res: Response) => {
       return;
     }
 
-    // First try to find stations with precipitation/snow elements
-    let response;
-    try {
-      response = await axios.get(`${FROST_API_URL}/sources/v0.jsonld`, {
-        params: {
-          geometry: `nearest(POINT(${lon} ${lat}))`,
-          nearestmaxcount: 10,
-          elements: 'sum(precipitation_amount PT1H),surface_snow_thickness',
-        },
-        auth,
-        headers: { 'User-Agent': USER_AGENT },
-      });
-    } catch (innerError) {
-      // If no stations found with specific elements, try without element filter
-      if (axios.isAxiosError(innerError) && innerError.response?.status === 404) {
-        response = await axios.get(`${FROST_API_URL}/sources/v0.jsonld`, {
-          params: {
-            geometry: `nearest(POINT(${lon} ${lat}))`,
-            nearestmaxcount: 10,
-          },
-          auth,
-          headers: { 'User-Agent': USER_AGENT },
-        });
-      } else {
-        throw innerError;
-      }
-    }
+    // Find nearest stations (no element filter to include all station types)
+    const response = await axios.get(`${FROST_API_URL}/sources/v0.jsonld`, {
+      params: {
+        geometry: `nearest(POINT(${lon} ${lat}))`,
+        nearestmaxcount: 10,
+      },
+      auth,
+      headers: { 'User-Agent': USER_AGENT },
+    });
 
     const result = response.data;
     cache.set(cacheKey, result, 3600); // Cache for 1 hour
@@ -82,6 +64,74 @@ router.get('/stations', async (req: Request, res: Response) => {
       }
       if (error.response?.status === 404) {
         // No stations found - return empty result
+        res.json({ data: [] });
+        return;
+      }
+      res.status(error.response?.status || 500).json({ 
+        error: 'Failed to fetch stations',
+        details: error.response?.data 
+      });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to fetch stations' });
+  }
+});
+
+// Get stations in a region (for map display)
+router.get('/stations-region', async (req: Request, res: Response) => {
+  try {
+    const auth = getFrostAuth();
+    if (!auth) {
+      res.status(503).json({ 
+        error: 'Frost API not configured. Station data unavailable.',
+        details: 'To enable station data, register at frost.met.no and set FROST_CLIENT_ID in backend/.env'
+      });
+      return;
+    }
+
+    const { bbox, country } = req.query;
+
+    let geometryParam: Record<string, string> = {};
+    
+    if (bbox) {
+      // bbox format: "minLon,minLat,maxLon,maxLat"
+      const [minLon, minLat, maxLon, maxLat] = (bbox as string).split(',').map(Number);
+      geometryParam = {
+        geometry: `POLYGON((${minLon} ${minLat},${maxLon} ${minLat},${maxLon} ${maxLat},${minLon} ${maxLat},${minLon} ${minLat}))`,
+      };
+    } else {
+      // Default to Norway if no bbox provided
+      geometryParam = { country: (country as string) || 'NO' };
+    }
+
+    const cacheKey = cache.generateKey('stations-region', JSON.stringify(geometryParam));
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    // Fetch all weather stations (no element filter to include mountain stations)
+    const response = await axios.get(`${FROST_API_URL}/sources/v0.jsonld`, {
+      params: {
+        ...geometryParam,
+        types: 'SensorSystem',
+      },
+      auth,
+      headers: { 'User-Agent': USER_AGENT },
+    });
+
+    const result = response.data;
+    cache.set(cacheKey, result, 3600); // Cache for 1 hour
+    res.json(result);
+  } catch (error: unknown) {
+    console.error('Frost stations-region error:', error);
+    if (axios.isAxiosError(error)) {
+      if (error.response?.status === 401) {
+        res.status(401).json({ error: 'Invalid Frost API credentials.' });
+        return;
+      }
+      if (error.response?.status === 404) {
         res.json({ data: [] });
         return;
       }

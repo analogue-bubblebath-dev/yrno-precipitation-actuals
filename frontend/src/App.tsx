@@ -19,7 +19,10 @@ function App() {
   });
   const [viewMode, setViewMode] = useState<ViewMode>('timeseries');
 
-  const { data, stations, selectedStation, loading, error, fetchData } = useWeatherData();
+  const { data, allStations, selectedStation, loading, error, fetchData } = useWeatherData();
+
+  // Always show all stations on the map
+  const displayStations = allStations;
 
   const handleLocationSelect = useCallback((coords: Coordinates, name?: string) => {
     setSelectedCoords(coords);
@@ -59,47 +62,25 @@ function App() {
           </p>
         </header>
 
-        {/* Main layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Left column: Map and location */}
-          <div className="space-y-4">
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 relative z-[1000]">
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Select Location
-              </h2>
-              <SearchBar
-                onLocationSelect={(coords, name) => handleLocationSelect(coords, name)}
-              />
-            </div>
-            
-            <div className="map-container bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 h-[400px]">
-              <MapView
-                selectedCoords={selectedCoords}
-                onLocationSelect={(coords) => handleLocationSelect(coords)}
-                stations={stations}
-              />
-            </div>
-
-            {selectedStation && (
-              <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 animate-fade-in">
-                <h3 className="text-sm font-medium text-slate-400 mb-2">
-                  Weather Station
-                </h3>
-                <p className="text-white font-medium">{selectedStation.name}</p>
-                <p className="text-sm text-slate-400">{selectedStation.id}</p>
-              </div>
-            )}
+        {/* Search and controls row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 relative z-[1000]">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Select Location
+            </h2>
+            <SearchBar
+              onLocationSelect={(coords, name) => handleLocationSelect(coords, name)}
+            />
+          </div>
+          
+          <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4">
+            <h2 className="text-lg font-semibold text-white mb-4">
+              Date Range
+            </h2>
+            <DateRangePicker value={dateRange} onChange={setDateRange} />
           </div>
 
-          {/* Right column: Date range and controls */}
           <div className="space-y-4">
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4">
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Date Range
-              </h2>
-              <DateRangePicker value={dateRange} onChange={setDateRange} />
-            </div>
-
             {locationName && (
               <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 animate-fade-in">
                 <h3 className="text-sm font-medium text-slate-400 mb-2">
@@ -111,6 +92,16 @@ function App() {
                     {selectedCoords.lat.toFixed(4)}°N, {selectedCoords.lon.toFixed(4)}°E
                   </p>
                 )}
+              </div>
+            )}
+
+            {selectedStation && (
+              <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl p-4 animate-fade-in">
+                <h3 className="text-sm font-medium text-slate-400 mb-2">
+                  Weather Station
+                </h3>
+                <p className="text-white font-medium">{selectedStation.name}</p>
+                <p className="text-sm text-slate-400">{selectedStation.id}</p>
               </div>
             )}
 
@@ -135,6 +126,15 @@ function App() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Large map section */}
+        <div className="map-container bg-slate-900/50 backdrop-blur-sm border border-slate-800 rounded-2xl overflow-hidden mb-8" style={{ height: '70vh', minHeight: '500px' }}>
+          <MapView
+            selectedCoords={selectedCoords}
+            onLocationSelect={(coords) => handleLocationSelect(coords)}
+            stations={displayStations}
+          />
         </div>
 
         {/* Charts section */}

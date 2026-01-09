@@ -4,6 +4,15 @@ import L from 'leaflet';
 import type { Coordinates, WeatherStation } from '../../types/weather';
 import 'leaflet/dist/leaflet.css';
 
+// Custom styles for station markers to ensure they're visible above selected location
+const stationMarkerStyle = document.createElement('style');
+stationMarkerStyle.textContent = `
+  .station-marker {
+    z-index: 1000 !important;
+  }
+`;
+document.head.appendChild(stationMarkerStyle);
+
 // Fix for default marker icons in Leaflet with Vite
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -19,19 +28,20 @@ L.Icon.Default.mergeOptions({
 
 const stationIcon = new L.Icon({
   iconUrl: 'data:image/svg+xml,' + encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3b82f6" width="24" height="24">
-      <circle cx="12" cy="12" r="10" fill="#3b82f6" stroke="#1e40af" stroke-width="2"/>
-      <circle cx="12" cy="12" r="4" fill="white"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+      <circle cx="16" cy="16" r="12" fill="#3b82f6" stroke="#1e40af" stroke-width="3"/>
+      <circle cx="16" cy="16" r="5" fill="white"/>
     </svg>
   `),
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
-  popupAnchor: [0, -12],
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+  popupAnchor: [0, -16],
+  className: 'station-marker',
 });
 
 interface MapViewProps {
   selectedCoords: Coordinates | null;
-  onLocationSelect: (coords: Coordinates) => void;
+  onLocationSelect: (coords: Coordinates, name?: string) => void;
   stations?: WeatherStation[];
 }
 
@@ -88,7 +98,7 @@ export function MapView({ selectedCoords, onLocationSelect, stations = [] }: Map
   const initialZoom = 5;
 
   return (
-    <div className="relative h-full w-full rounded-xl overflow-hidden shadow-lg">
+    <div className="relative h-full w-full">
       <MapContainer
         center={defaultCenter}
         zoom={initialZoom}
@@ -108,7 +118,9 @@ export function MapView({ selectedCoords, onLocationSelect, stations = [] }: Map
               onLocationSelect={onLocationSelect}
             />
             
-            {stations.map((station) => (
+            {stations
+              .filter((station) => station.geometry?.coordinates)
+              .map((station) => (
               <Marker
                 key={station.id}
                 position={[
@@ -116,6 +128,18 @@ export function MapView({ selectedCoords, onLocationSelect, stations = [] }: Map
                   station.geometry.coordinates[0],
                 ]}
                 icon={stationIcon}
+                zIndexOffset={1000}
+                eventHandlers={{
+                  click: () => {
+                    onLocationSelect(
+                      {
+                        lat: station.geometry.coordinates[1],
+                        lon: station.geometry.coordinates[0],
+                      },
+                      station.name
+                    );
+                  },
+                }}
               >
                 <Popup>
                   <span className="font-medium">{station.name}</span>

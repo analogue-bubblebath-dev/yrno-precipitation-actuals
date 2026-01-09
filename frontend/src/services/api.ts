@@ -64,6 +64,36 @@ export async function getNearbyStations(coords: Coordinates): Promise<WeatherSta
   }));
 }
 
+export interface BoundingBox {
+  minLon: number;
+  minLat: number;
+  maxLon: number;
+  maxLat: number;
+}
+
+export async function getStationsInRegion(bbox?: BoundingBox, country?: string): Promise<WeatherStation[]> {
+  const params: Record<string, string> = {};
+  
+  if (bbox) {
+    params.bbox = `${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`;
+  } else if (country) {
+    params.country = country;
+  }
+  // If neither bbox nor country provided, API defaults to Norway
+  
+  const response = await api.get('/frost/stations-region', { params });
+  
+  // Parse the JSON-LD response
+  const data = response.data;
+  if (!data.data) return [];
+  
+  return data.data.map((station: Record<string, unknown>) => ({
+    id: station['@id'] || station.id,
+    name: station.name,
+    geometry: station.geometry,
+  }));
+}
+
 export async function getHistoricalData(
   stationId: string,
   startDate: Date,

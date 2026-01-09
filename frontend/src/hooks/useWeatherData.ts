@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type {
   Coordinates,
   PrecipitationData,
@@ -9,14 +9,17 @@ import {
   getNearbyStations,
   getHistoricalData,
   getForecast,
+  getStationsInRegion,
 } from '../services/api';
 import { parseISO, isAfter, isBefore, addDays } from 'date-fns';
 
 interface UseWeatherDataReturn {
   data: PrecipitationData[];
   stations: WeatherStation[];
+  allStations: WeatherStation[];
   selectedStation: WeatherStation | null;
   loading: boolean;
+  stationsLoading: boolean;
   error: string | null;
   fetchData: (coords: Coordinates, dateRange: DateRange) => Promise<void>;
   setSelectedStation: (station: WeatherStation | null) => void;
@@ -25,9 +28,28 @@ interface UseWeatherDataReturn {
 export function useWeatherData(): UseWeatherDataReturn {
   const [data, setData] = useState<PrecipitationData[]>([]);
   const [stations, setStations] = useState<WeatherStation[]>([]);
+  const [allStations, setAllStations] = useState<WeatherStation[]>([]);
   const [selectedStation, setSelectedStation] = useState<WeatherStation | null>(null);
   const [loading, setLoading] = useState(false);
+  const [stationsLoading, setStationsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load all stations on mount
+  useEffect(() => {
+    const loadAllStations = async () => {
+      setStationsLoading(true);
+      try {
+        const regionStations = await getStationsInRegion();
+        setAllStations(regionStations);
+      } catch (err) {
+        console.warn('Could not fetch region stations:', err);
+      } finally {
+        setStationsLoading(false);
+      }
+    };
+
+    loadAllStations();
+  }, []);
 
   const fetchData = useCallback(async (coords: Coordinates, dateRange: DateRange) => {
     setLoading(true);
@@ -175,8 +197,10 @@ export function useWeatherData(): UseWeatherDataReturn {
   return {
     data,
     stations,
+    allStations,
     selectedStation,
     loading,
+    stationsLoading,
     error,
     fetchData,
     setSelectedStation,
