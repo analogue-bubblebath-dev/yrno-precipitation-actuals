@@ -3,6 +3,7 @@
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install && cd frontend && npm install",
   "rewrites": [
+    { "source": "/api/frost/stations-region", "destination": "/api/frost/stations-region" },
     { "source": "/api/frost/stations", "destination": "/api/frost/stations" },
     { "source": "/api/frost/observations", "destination": "/api/frost/observations" },
     { "source": "/api/forecast", "destination": "/api/forecast" },
